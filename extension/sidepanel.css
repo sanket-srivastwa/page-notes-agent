@@ -40,4 +40,9 @@ main { padding: 16px 14px 48px; }
 .notes th, .notes td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; vertical-align: top; }
 .notes th { background: var(--code-bg); }
 .notes a { color: var(--accent); }
+details.verify { font: 12px system-ui, sans-serif; margin: 0 0 8px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); }
+details.verify summary { cursor: pointer; }
+details.verify.ok { color: var(--muted); }
+details.verify.warn { color: var(--warn); border-color: var(--warn); }
+details.verify p { margin: 4px 0 0; font-family: system-ui, sans-serif; font-size: 12px; }
 @media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }

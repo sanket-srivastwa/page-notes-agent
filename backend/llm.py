@@ -75,8 +75,16 @@ class MockProvider(LLMProvider):
 
     async def generate(self, system: str, prompt: str) -> str:
         src = prompt.split("<source>", 1)[-1].split("</source>", 1)[0].strip()
-        return "## (mock) Notes\n" + "\n".join(f"- {l}" if l.strip() and not l.startswith(("#", "```", "!", "|")) else l
-                                               for l in src.splitlines())
+        out, in_code = ["## (mock) Notes"], False
+        for l in src.splitlines():
+            if l.lstrip().startswith("```"):
+                in_code = not in_code
+                out.append(l)
+            elif in_code or not l.strip() or l.startswith(("#", "!", "|", "⟦")):
+                out.append(l)
+            else:
+                out.append(f"- {l}")
+        return "\n".join(out)
 
     async def describe_image(self, system: str, prompt: str, image: bytes, mime: str = "image/png") -> str:
         return f"- (mock) description of a {len(image)}-byte frame"

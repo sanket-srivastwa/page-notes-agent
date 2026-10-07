@@ -93,6 +93,32 @@ function render(md) {
   return html;
 }
 
+// ---------- verification badges (v0.2) ----------
+const VERIFY_LABEL = {
+  clean: ["✓ Verified against the page", "ok"],
+  repaired: ["✓ Verified after a repair pass", "ok"],
+  recovered: ["⚠ Some source content was recovered verbatim", "warn"],
+  issues: ["⚠ Possible gaps remain", "warn"],
+};
+
+function verifyBadge(v) {
+  if (!v || !VERIFY_LABEL[v.status]) return null;
+  const [text, cls] = VERIFY_LABEL[v.status];
+  const d = document.createElement("details");
+  d.className = `verify ${cls}`;
+  const sum = document.createElement("summary");
+  sum.textContent = text + (v.coverage != null ? ` (word coverage ${Math.round(v.coverage * 100)}%)` : "");
+  d.appendChild(sum);
+  const lines = [];
+  if (v.found) lines.push(`${v.found} problem(s) found by the checker.`);
+  if (v.repaired) lines.push("The note-writer was asked to fix them and the fix passed the re-check.");
+  if (v.recovered) lines.push(`${v.recovered} item(s) were copied from the page under "Recovered from source".`);
+  for (const i of v.issues || []) lines.push(i.detail);
+  for (const l of lines) { const p = document.createElement("p"); p.textContent = l; d.appendChild(p); }
+  if (v.status === "clean") d.hidden = false;
+  return d;
+}
+
 // ---------- main flow ----------
 function busy(on) {
   $("go").disabled = on;
@@ -174,6 +200,7 @@ $("go").onclick = async () => {
 
   controller = new AbortController();
   let total = 0, done = 0, failed = 0;
+  let verification = null;
   const warnings = [];
   try {
     const res = await fetch(`${backend}/notes/stream`, {
@@ -211,13 +238,16 @@ $("go").onclick = async () => {
           fullMd += ev.md + "\n\n";
           const sec = document.createElement("section");
           sec.innerHTML = render(ev.md);
+          const badge = verifyBadge(ev.verification);
+          if (badge) sec.prepend(badge);
           notes.appendChild(sec);
           progress(done, total);
           setStatus(`Writing notes: ${done} of ${total} parts…`);
         } else if (ev.type === "error") {
           throw new Error(ev.message);
-        } else if (ev.type === "done" && ev.note) {
-          setStatus(ev.note, true);
+        } else if (ev.type === "done") {
+          if (ev.verification) verification = ev.verification;
+          if (ev.note) setStatus(ev.note, true);
         }
       }
     }
@@ -226,7 +256,15 @@ $("go").onclick = async () => {
       const issues = [];
       if (warnings.length) issues.push(`${warnings.length} animation(s) could not be captured. First reason: ${warnings[0]}`);
       if (failed) issues.push(`${failed} part(s) fell back to the raw text (check the Gemini quota and retry; finished parts are cached)`);
-      setStatus(issues.length ? `Done, but: ${issues.join("; ")}.` : `Done. ${done} part(s) of notes ready.`, issues.length > 0);
+      if (verification) {
+        const v = verification;
+        if (v.issues) issues.push(`${v.issues} part(s) may still have gaps (expand the badge on each part)`);
+        const fixed = v.repaired + v.recovered;
+        const msg = `Verified ${v.clean + fixed} of ${done} part(s)` + (fixed ? `, ${fixed} needed fixing` : "") + ".";
+        setStatus(issues.length ? `${msg} Note: ${issues.join("; ")}.` : `Done. ${msg}`, issues.length > 0);
+      } else {
+        setStatus(issues.length ? `Done, but: ${issues.join("; ")}.` : `Done. ${done} part(s) of notes ready.`, issues.length > 0);
+      }
     }
   } catch (e) {
     const aborted = e.name === "AbortError";

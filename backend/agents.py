@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import cache
 import media
 from llm import LLMError, LLMProvider
+from verifier import Verifier
 
 TOKEN_RE = re.compile(r"⟦VIDEO:[0-9a-f]{8}⟧")
 MAX_CHUNK_CHARS = 9000   # hard ceiling per LLM call
@@ -214,6 +215,7 @@ class Orchestrator:
         self.llm = llm
         self.writer = NoteWriter(llm)
         self.videos = VideoAgent(llm)
+        self.verifier = Verifier(llm)
         self.swap: dict[str, str] = {}
         self.sem = asyncio.Semaphore(int(os.getenv("CONCURRENCY", "2")))
 
@@ -225,23 +227,30 @@ class Orchestrator:
             md = md.replace(token, "\n\n" + rep + "\n\n") if token in md else md + "\n\n" + rep
         return md
 
+    async def _verified(self, k: str, chunk: Chunk, md: str, fresh: bool) -> dict:
+        """Run the Verifier on a section's notes; persist any repair so the cache holds the best version."""
+        md2, ver = await self.verifier.run(chunk.text, md)
+        if md2 != md or fresh:
+            cache.put(k, md2)
+        return {"index": chunk.index, "heading": chunk.heading, "md": self._apply(md2, chunk.text), "verification": ver}
+
     async def _one(self, title: str, outline: list[str], chunk: Chunk, total: int) -> dict:
         k = cache.key(self.llm.name, WRITER_SYSTEM, chunk.text)
         hit = cache.get(k)
         if hit:
-            return {"index": chunk.index, "heading": chunk.heading, "md": self._apply(hit, chunk.text), "cached": True}
+            async with self.sem:
+                return {**await self._verified(k, chunk, hit, fresh=False), "cached": True}
         async with self.sem:
             try:
                 md = await self.writer.write(title, outline, chunk, total)
                 if not md:
                     raise LLMError("empty response")
-                cache.put(k, md)
-                return {"index": chunk.index, "heading": chunk.heading, "md": self._apply(md, chunk.text)}
             except LLMError as e:
                 # Never lose content: fall back to the raw source and say so.
                 return {"index": chunk.index, "heading": chunk.heading,
                         "md": self._apply(f"> Note generation failed for this part ({e}). Raw source is shown instead.\n\n{chunk.text}", chunk.text),
-                        "error": str(e)}
+                        "error": str(e), "verification": {"status": "skipped"}}
+            return await self._verified(k, chunk, md, fresh=True)
 
     async def run(self, page: dict, media_base: str = "", referer: str = ""):
         blocks = list(page.get("blocks", []))
@@ -275,6 +284,12 @@ class Orchestrator:
             yield {"type": "done", "note": "No readable content found on this page."}
             return
         tasks = [asyncio.create_task(self._one(title, outline, c, len(chunks))) for c in chunks]
+        summary = {"clean": 0, "repaired": 0, "recovered": 0, "issues": 0, "items_recovered": 0}
         for t in tasks:
-            yield {"type": "chunk", **(await t)}
-        yield {"type": "done", "video_failures": failures}
+            res = await t
+            ver = res.get("verification", {})
+            if ver.get("status") in ("clean", "repaired", "recovered", "issues"):
+                summary[ver["status"]] += 1
+            summary["items_recovered"] += ver.get("recovered", 0)
+            yield {"type": "chunk", **res}
+        yield {"type": "done", "video_failures": failures, "verification": summary}

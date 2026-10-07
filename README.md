@@ -11,7 +11,12 @@ Chrome extension + FastAPI backend. Click the toolbar icon on a page you are rea
    never rewritten by the note model. Failures appear in the notes with the exact reason.
 3. **Chunker**: splits at h1-h3 boundaries, never inside code blocks or tables.
 4. **NoteWriter**: source-only prompt (`WRITER_SYSTEM` in `backend/agents.py`): no outside facts, no assumptions.
-5. **Orchestrator**: low concurrency, SQLite cache, key failover, raw-text fallback so nothing is silently lost.
+5. **Verifier** (`backend/verifier.py`): checks every section's notes against its source: code blocks verbatim,
+   images, table cells, numbers, identifiers, and sentence-level recall. Problems trigger one repair call; a repair
+   is accepted only if it strictly improves the check. Anything still missing is copied from the page verbatim under
+   "Recovered from source", and numbers the source never states are flagged. Each section gets a badge in the panel.
+   `VERIFY_MODE=llm` adds a semantic audit call per section. Tests: `cd backend && python -m unittest discover -s tests`.
+6. **Orchestrator**: low concurrency, SQLite cache, key failover, raw-text fallback so nothing is silently lost.
 
 ## Setup
 ### 1. Backend
@@ -48,6 +53,6 @@ Set FALLBACK_BASE_URL / FALLBACK_API_KEY / FALLBACK_MODEL (any OpenAI-compatible
 to be used when all Gemini keys fail. It is text only: frame descriptions need Gemini.
 
 ## Not built yet
-Multi-page course crawler, live updating while you scroll, a verifier agent that diffs notes against the source,
+Multi-page course crawler, live updating while you scroll,
 vision descriptions for ordinary `<img>` diagrams.
 # page-notes-agent
