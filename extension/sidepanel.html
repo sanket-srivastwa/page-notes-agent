@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page Notes</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <div class="row">
+      <button id="go" class="primary">Take notes from this page</button>
+      <button id="cancel" class="ghost" hidden>Stop</button>
+    </div>
+    <div id="progress" class="bar" hidden><span></span></div>
+    <p id="status" role="status">Open a page you are reading, then take notes.</p>
+    <div class="row tools">
+      <button id="copy" class="ghost" disabled>Copy Markdown</button>
+      <button id="download" class="ghost" disabled>Download .md</button>
+    </div>
+    <details>
+      <summary>Backend address</summary>
+      <input id="backend" type="text" spellcheck="false" value="http://localhost:8000">
+    </details>
+  </header>
+  <main>
+    <article id="notes" class="notes">
+      <p class="empty">Notes for the page you are on will build up here, section by section.</p>
+    </article>
+  </main>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
