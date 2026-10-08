@@ -124,10 +124,11 @@ class NoteWriter:
     def __init__(self, llm: LLMProvider):
         self.llm = llm
 
-    async def write(self, page_title: str, outline: list[str], chunk: Chunk, total: int) -> str:
+    async def write(self, page_title: str, outline: list[str], chunk: Chunk, total: int, context: str = "") -> str:
         prompt = (
             f"Page title: {page_title}\n"
-            f"Page outline (for context only): {' | '.join(outline[:40])}\n"
+            + (f"Where this page sits (context only, never a source of facts): {context}\n" if context else "")
+            + f"Page outline (for context only): {' | '.join(outline[:40])}\n"
             f"This is part {chunk.index + 1} of {total}. Write notes for this part only, using ONLY the text inside <source>.\n\n"
             f"<source>\n{chunk.text}\n</source>"
         )
@@ -236,7 +237,7 @@ class Orchestrator:
             cache.put(k, md2)
         return {"index": chunk.index, "heading": chunk.heading, "md": self._apply(md2, chunk.text), "verification": ver}
 
-    async def _one(self, title: str, outline: list[str], chunk: Chunk, total: int) -> dict:
+    async def _one(self, title: str, outline: list[str], chunk: Chunk, total: int, context: str = "") -> dict:
         k = cache.key(self.llm.name, WRITER_SYSTEM, chunk.text)
         hit = cache.get(k)
         if hit:
@@ -244,7 +245,7 @@ class Orchestrator:
                 return {**await self._verified(k, chunk, hit, fresh=False), "cached": True}
         async with self.sem:
             try:
-                md = await self.writer.write(title, outline, chunk, total)
+                md = await self.writer.write(title, outline, chunk, total, context)
                 if not md:
                     raise LLMError("empty response")
             except LLMError as e:
@@ -285,7 +286,8 @@ class Orchestrator:
         if not chunks:
             yield {"type": "done", "note": "No readable content found on this page."}
             return
-        tasks = [asyncio.create_task(self._one(title, outline, c, len(chunks))) for c in chunks]
+        context = (page.get("context") or "")[:1500]
+        tasks = [asyncio.create_task(self._one(title, outline, c, len(chunks), context)) for c in chunks]
         summary = {"clean": 0, "repaired": 0, "recovered": 0, "issues": 0, "items_recovered": 0}
         for t in tasks:
             res = await t

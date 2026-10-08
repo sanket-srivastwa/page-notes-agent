@@ -35,6 +35,7 @@ class PagePayload(BaseModel):
     url: str = ""
     title: str = ""
     blocks: list[dict] = []
+    context: str = ""  # course crawler: e.g. "Course X, lesson 5 of 27, chapter Y" (prompt context only)
 
 
 @app.get("/health")
