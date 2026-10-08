@@ -10,6 +10,14 @@
     return;
   }
 
+  const { noteStyle } = await chrome.storage.local.get("noteStyle");
+  const style = noteStyle || "caveat";
+  if (style === "caveat" || style === "kalam") root.classList.add("hand", `hand-${style}`);
+  // Handwriting must be loaded before the print dialog opens, or the PDF would capture the fallback font.
+  if (document.fonts && root.classList.contains("hand")) {
+    try { await Promise.all([document.fonts.load('400 20px "Caveat"'), document.fonts.load('700 20px "Caveat"'), document.fonts.load('400 16px "Kalam"'), document.fonts.load('700 16px "Kalam"')]); } catch { /* fall back to the system cursive font */ }
+  }
+
   // Chrome uses the page title as the default PDF file name.
   document.title = (printJob.title || "notes").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "notes";
 

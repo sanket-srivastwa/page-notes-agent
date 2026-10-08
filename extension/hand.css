@@ -1,0 +1,42 @@
+/* Handwritten note style, shared by the side panel and the print view. Display only: the Markdown is never changed.
+   Fonts are bundled (extensions cannot load remote fonts): Caveat (cursive) and Kalam (neat), both SIL OFL. */
+@font-face { font-family: "Caveat"; font-weight: 400; src: url("fonts/caveat-latin-400-normal.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Caveat"; font-weight: 700; src: url("fonts/caveat-latin-700-normal.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Kalam"; font-weight: 400; src: url("fonts/kalam-latin-400-normal.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Kalam"; font-weight: 700; src: url("fonts/kalam-latin-700-normal.woff2") format("woff2"); font-display: swap; }
+
+/* The notes become a sheet of paper with ink-coloured text, in light and dark mode alike. */
+.notes.hand {
+  --ink: #1f2a44; --muted: #5b6477; --line: #d8cfb8; --code-bg: #f3ecd8; --accent: #1b4fa8; --warn: #a65a00;
+  --pen-blue: #1b4fa8; --pen-red: #c2261b; --pen-green: #17753a; --pen-purple: #7a3fb0; --pen-orange: #c25b00; --pen-teal: #0b7a85;
+  --marker: #fff08a;
+  background: #fffdf4; color: var(--ink); border-radius: 8px; padding: 10px 16px 18px; border-left: 3px solid #e8a5a0;
+  --hand: "Caveat", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  --hand-size: 22px;
+  font-family: var(--hand); font-size: var(--hand-size); line-height: 1.35; font-weight: 400; letter-spacing: .1px;
+}
+.notes.hand.hand-kalam { --hand: "Kalam", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive; --hand-size: 16px; line-height: 1.6; }
+
+.notes.hand h1, .notes.hand h2, .notes.hand h3, .notes.hand h4 { font-family: var(--hand); font-weight: 700; line-height: 1.15; color: var(--ink); }
+.notes.hand h1 { font-size: 1.7em; }
+.notes.hand h2 { font-size: 1.45em; border-top: 0; padding-top: 0; text-decoration: underline 1.5px; text-underline-offset: 5px; }
+.notes.hand h3 { font-size: 1.25em; }
+.notes.hand h4 { font-size: 1.1em; }
+.notes.hand section.lesson > h2 { border-top: 0; }
+
+/* Everything is written in one dark ink. Only important points are coloured:
+   key terms (**bold**) get a highlighter stroke, and lines labelled Important / Key idea / Remember (red)
+   or Warning / Caution / Trade-off (orange) are written in that pen. */
+.notes.hand strong { font-weight: 700; color: var(--ink); background: linear-gradient(transparent 55%, var(--marker) 55%); padding: 0 2px; }
+.notes.hand strong.lbl { background: none; padding: 0; }
+.notes.hand strong.pen-red    { color: var(--pen-red); background: linear-gradient(transparent 55%, #ffd9d6 55%); padding: 0 2px; }
+.notes.hand strong.pen-orange { color: var(--pen-orange); background: linear-gradient(transparent 55%, #ffe3c2 55%); padding: 0 2px; }
+.notes.hand a { color: var(--pen-blue); }
+
+/* Code, tables and badges stay in clear print so they remain exact and readable. */
+.notes.hand code, .notes.hand pre, .notes.hand pre code { font-family: ui-monospace, Menlo, Consolas, monospace; color: #22304a; }
+.notes.hand code { font-size: .62em; } .notes.hand pre code { font-size: .6em; }
+.notes.hand table, .notes.hand details.verify, .notes.hand details.verify p { font-family: system-ui, sans-serif; font-size: 13px; }
+.notes.hand th { background: var(--code-bg); }
+.notes.hand blockquote { border-left-color: var(--line); color: var(--muted); }
+.notes.hand img { background: #fff; }

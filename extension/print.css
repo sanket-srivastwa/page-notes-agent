@@ -36,3 +36,11 @@ table { border-collapse: collapse; width: 100%; font: 9.5pt system-ui, sans-seri
 th, td { border: 1px solid var(--line); padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
 th { background: var(--code); }
 tr { break-inside: avoid; }
+
+/* Handwritten style on the printed sheet: white paper, no side rule, ink colours kept. */
+.notes.hand { background: #fff; border-left: 0; border-radius: 0; padding: 16mm 14mm; font-size: 17pt; }
+.notes.hand.hand-kalam { font-size: 12.5pt; }
+.notes.hand h1, .notes.hand h2, .notes.hand h3, .notes.hand h4 { font-family: var(--hand); }
+.notes.hand h1 { font-size: 1.7em; } .notes.hand h2 { font-size: 1.45em; margin: 6mm 0 2mm; padding-top: 0; } .notes.hand h3 { font-size: 1.25em; } .notes.hand h4 { font-size: 1.1em; }
+.notes.hand code, .notes.hand pre code { font-size: .55em; }
+@media print { .notes.hand { padding: 0; } }

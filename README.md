@@ -23,6 +23,15 @@ Press **Save as PDF** in the side panel. A clean print view opens in a new tab a
 set Destination to "Save as PDF". Images are loaded from the local backend, so keep it running until the PDF is saved.
 (Markdown download was removed; "Copy Markdown" is still there for pasting into Notion or other tools.)
 
+## Handwritten note style
+The side panel has a **Style** dropdown: *Handwritten (cursive)* (Caveat, default), *Handwritten (neat)* (Kalam) or *Plain*.
+It only changes how notes are displayed and printed; the Markdown, the cache and "Copy Markdown" are unchanged, so
+existing notes switch style instantly. Everything is written in one dark ink; only important points are coloured:
+**bold** key terms get a highlighter stroke, and lines starting with Important / Key idea / Remember (red) or
+Warning / Caution / Trade-off (orange) are written in that pen. Code and tables stay in a clear print font.
+"Save as PDF" uses the chosen style. Fonts are bundled in `extension/fonts` (SIL Open Font License) because extensions
+cannot load remote fonts. Colours and sizes live in `extension/hand.css`.
+
 ## Setup
 ### 1. Backend
     cd backend

@@ -28,7 +28,24 @@ function inl(s) {
   s = s.replace(/\[([^\]]+)\]\((#[^\s)]+)\)/g, '<a href="$2">$1</a>');
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+  s = penLabel(s);
   return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[+i]}</code>`);
+}
+
+// A line that starts with a label such as "Example:" or "**Warning:**" gets a pen colour class on that label.
+// Only the colour is added; the words are untouched. The classes are styled by hand.css (plain mode ignores them).
+const PEN_LABELS = [
+  ["pen-red", /important|key (?:idea|point)s?|remember|takeaway/],
+  ["pen-orange", /warning|caution|pitfall|gotcha|trade-?offs?/],
+];
+// Other labels (Example, Tip, Note, Diagram...) stay in normal ink; they only lose the key-term highlight.
+const PLAIN_LABELS = /^(?:examples?|diagram(?: note)?|tips?|trick|rule|formula|notes?|definition|summary)$/i;
+function penLabel(s) {
+  const m = /^(?:<strong>)?([A-Za-z][A-Za-z -]{1,24}?)(?::(?:<\/strong>)?|<\/strong>:)(?=\s|$)/.exec(s);
+  if (!m) return s;
+  const hit = PEN_LABELS.find(([, re]) => new RegExp(`^(?:${re.source})$`, "i").test(m[1].trim()));
+  if (!hit) return PLAIN_LABELS.test(m[1].trim()) && s.startsWith("<strong>") ? `<strong class="lbl">${m[1]}:</strong>` + s.slice(m[0].length) : s;
+  return `<strong class="lbl ${hit[0]}">${m[1]}:</strong>` + s.slice(m[0].length);
 }
 
 const LIST_RE = /^(\s*)([-*+]|\d+\.)\s+(.*)/;

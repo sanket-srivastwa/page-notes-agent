@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Page Notes</title>
   <link rel="stylesheet" href="sidepanel.css">
+  <link rel="stylesheet" href="hand.css">
 </head>
 <body>
   <header>
@@ -17,6 +18,13 @@
     <div class="row tools">
       <button id="copy" class="ghost" disabled>Copy Markdown</button>
       <button id="pdf" class="ghost" disabled>Save as PDF</button>
+      <label class="stylepick">Style
+        <select id="notestyle">
+          <option value="caveat">Handwritten (cursive)</option>
+          <option value="kalam">Handwritten (neat)</option>
+          <option value="plain">Plain</option>
+        </select>
+      </label>
     </div>
     <details id="coursebox">
       <summary>Course mode: take notes for every page of a course</summary>

@@ -8,6 +8,22 @@ chrome.storage.local.get("backend").then((s) => { if (s.backend) $("backend").va
 $("backend").addEventListener("change", () => chrome.storage.local.set({ backend: $("backend").value.trim() }));
 closeStaleCrawlWindow(); // a crawl window left behind by a panel that was closed mid-crawl
 
+// Note style (handwritten / plain) is display only: the Markdown, the copy button and the cache are unaffected.
+const applyNoteStyle = (v) => {
+  const n = $("notes");
+  n.classList.remove("hand", "hand-caveat", "hand-kalam");
+  if (v === "caveat" || v === "kalam") n.classList.add("hand", `hand-${v}`);
+};
+chrome.storage.local.get("noteStyle").then((st) => {
+  const v = st.noteStyle || "caveat";
+  $("notestyle").value = v;
+  applyNoteStyle(v);
+});
+$("notestyle").addEventListener("change", () => {
+  applyNoteStyle($("notestyle").value);
+  chrome.storage.local.set({ noteStyle: $("notestyle").value });
+});
+
 const backendUrl = () => ($("backend").value.trim() || "http://localhost:8000").replace(/\/$/, "");
 
 function setStatus(msg, isError = false) {
@@ -87,7 +103,7 @@ async function streamNotes(payload, signal, h = {}) {
   });
   if (!res.ok) throw new Error(`Backend returned ${res.status}`);
 
-  const out = { done: 0, failed: 0, warnings: [], verification: null };
+  const out = { done: 0, failed: 0, firstError: "", warnings: [], verification: null };
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -104,7 +120,7 @@ async function streamNotes(payload, signal, h = {}) {
       if (ev.type === "meta") h.onMeta && h.onMeta(ev.chunks);
       else if (ev.type === "warning") { out.warnings.push(ev.message); h.onWarning && h.onWarning(ev.message); }
       else if (ev.type === "status") h.onStatus && h.onStatus(ev.message);
-      else if (ev.type === "chunk") { out.done++; if (ev.error) out.failed++; h.onChunk && h.onChunk(ev, out); }
+      else if (ev.type === "chunk") { out.done++; if (ev.error) { out.failed++; out.firstError = out.firstError || ev.error; } h.onChunk && h.onChunk(ev, out); }
       else if (ev.type === "error") throw new Error(ev.message);
       else if (ev.type === "done") {
         if (ev.verification) out.verification = ev.verification;
@@ -171,7 +187,7 @@ $("go").onclick = async () => {
     if (res.done) {
       const issues = [];
       if (res.warnings.length) issues.push(`${res.warnings.length} animation(s) could not be captured. First reason: ${res.warnings[0]}`);
-      if (res.failed) issues.push(`${res.failed} part(s) fell back to the raw text (check the Gemini quota and retry; finished parts are cached)`);
+      if (res.failed) issues.push(`${res.failed} part(s) fell back to the raw text (reason: ${String(res.firstError).slice(0, 200)}; finished parts are cached)`);
       const v = res.verification;
       if (v && v.clean + v.repaired + v.recovered + v.issues > 0) {
         if (v.issues) issues.push(`${v.issues} part(s) may still have gaps (expand the badge on each part)`);
@@ -421,7 +437,7 @@ $("start").onclick = async () => {
         },
       });
     if (!parts.length) throw new Error("The backend returned no notes for this page.");
-    if (res.failed) throw new Error(`${res.failed} part(s) fell back to raw text (usually the Gemini quota). Finished parts are cached; Resume will retry.`);
+    if (res.failed) throw new Error(`${res.failed} part(s) fell back to raw text (${String(res.firstError).slice(0, 200)}). Finished parts are cached; Resume will retry.`);
     const verif = { clean: 0, repaired: 0, recovered: 0, issues: 0 };
     parts.forEach((e) => { const s = e.verification && e.verification.status; if (s in verif) verif[s]++; });
     return { md: parts.map((e) => e.md).join("\n\n"), verif };
