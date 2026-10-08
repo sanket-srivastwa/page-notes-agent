@@ -256,7 +256,7 @@ $("go").onclick = async () => {
       const issues = [];
       if (warnings.length) issues.push(`${warnings.length} animation(s) could not be captured. First reason: ${warnings[0]}`);
       if (failed) issues.push(`${failed} part(s) fell back to the raw text (check the Gemini quota and retry; finished parts are cached)`);
-      if (verification) {
+      if (verification && (verification.clean + verification.repaired + verification.recovered + verification.issues) > 0) {
         const v = verification;
         if (v.issues) issues.push(`${v.issues} part(s) may still have gaps (expand the badge on each part)`);
         const fixed = v.repaired + v.recovered;
