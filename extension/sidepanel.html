@@ -18,17 +18,41 @@
       <button id="copy" class="ghost" disabled>Copy Markdown</button>
       <button id="pdf" class="ghost" disabled>Save as PDF</button>
     </div>
+    <details id="coursebox">
+      <summary>Course mode: take notes for every page of a course</summary>
+      <p class="hint">Open the course's main page (or any lesson), then press Find. Pages are opened one at a time in a
+        separate browser window using your logged-in session. Keep that window visible (it can be small), because
+        browsers pause hidden pages.</p>
+      <div class="row"><button id="find" class="ghost">Find course pages</button></div>
+    </details>
     <details>
       <summary>Backend address</summary>
       <input id="backend" type="text" spellcheck="false" value="http://localhost:8000">
     </details>
   </header>
   <main>
+    <section id="picker" hidden>
+      <h2 id="picker-title"></h2>
+      <p id="picker-info" class="hint"></p>
+      <div class="row">
+        <button id="pick-all" class="ghost">All</button>
+        <button id="pick-none" class="ghost">None</button>
+        <button id="start" class="primary">Start</button>
+        <button id="discard" class="ghost" hidden>Start over</button>
+      </div>
+      <ul id="picker-list"></ul>
+    </section>
+    <details id="pagesbox" hidden open>
+      <summary id="pages-summary">Pages</summary>
+      <ol id="pagelist"></ol>
+    </details>
     <article id="notes" class="notes">
       <p class="empty">Notes for the page you are on will build up here, section by section.</p>
     </article>
   </main>
   <script src="render.js"></script>
+  <script src="course.js"></script>
+  <script src="crawler.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

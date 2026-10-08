@@ -1,5 +1,22 @@
 // Shared Markdown renderer, used by the side panel and the print view.
 // ---------- minimal Markdown renderer (no remote scripts allowed in MV3) ----------
+// GitHub-style heading anchors, so the table of contents works here, in the print view and in exported Markdown.
+function plainText(md) {
+  return md.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[`*_]/g, "");
+}
+function githubSlug(text) {
+  return plainText(text).trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-");
+}
+function makeSlugger() {
+  const seen = new Map();
+  return (text) => {
+    const base = githubSlug(text);
+    const n = seen.get(base) || 0;
+    seen.set(base, n + 1);
+    return n ? `${base}-${n}` : base;
+  };
+}
+
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function inl(s) {
@@ -8,6 +25,7 @@ function inl(s) {
   s = s.replace(/!\[([^\]]*)\]\((https?:[^\s)]+)\)/g,
     (_, a, u) => `<img alt="${a}" src="${u}" referrerpolicy="no-referrer" loading="lazy">`);
   s = s.replace(/\[([^\]]+)\]\((https?:[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  s = s.replace(/\[([^\]]+)\]\((#[^\s)]+)\)/g, '<a href="$2">$1</a>');
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
   return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[+i]}</code>`);
@@ -16,7 +34,9 @@ function inl(s) {
 const LIST_RE = /^(\s*)([-*+]|\d+\.)\s+(.*)/;
 const isBlockStart = (l) => /^(#{1,6}\s|\s*```|>|\s*\||\s*([-*+]|\d+\.)\s)/.test(l);
 
-function render(md) {
+// opts.ids: give headings GitHub-style ids (use for whole documents; a fresh slugger per call).
+function render(md, opts = {}) {
+  const slug = opts.ids ? makeSlugger() : null;
   const lines = md.replace(/\r/g, "").split("\n");
   let html = "", i = 0;
   const stack = [];
@@ -40,7 +60,8 @@ function render(md) {
     if (!line.trim()) { i++; continue; }
     if ((m = /^(#{1,6})\s+(.*)/.exec(line))) {
       closeLists();
-      html += `<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`; i++; continue;
+      const id = slug ? ` id="${esc(slug(m[2]))}"` : "";
+      html += `<h${m[1].length}${id}>${inl(m[2])}</h${m[1].length}>`; i++; continue;
     }
     if ((m = LIST_RE.exec(line))) {
       const indent = m[1].replace(/\t/g, "  ").length;

@@ -1,11 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Page Notes Agent",
-  "version": "0.1.0",
-  "description": "Turns the page you are reading into detailed, structured notes using a multi-agent backend.",
-  "permissions": ["activeTab", "scripting", "sidePanel", "storage"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js" },
-  "side_panel": { "default_path": "sidepanel.html" },
-  "action": { "default_title": "Open Page Notes" }
+  "version": "0.4.0",
+  "description": "Turns the page you are reading, or a whole course, into detailed structured notes using a multi-agent backend.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open Page Notes"
+  }
 }

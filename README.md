@@ -1,4 +1,4 @@
-# Page Notes Agent v0.3 (single page, animation frames, multi-key Gemini)
+# Page Notes Agent v0.4 (single page, whole courses, animation frames, verifier, multi-key Gemini)
 
 Chrome extension + FastAPI backend. Click the toolbar icon on a page you are reading, press
 "Take notes from this page", and structured notes build up in the side panel section by section.
@@ -57,7 +57,33 @@ on this to multiply a free tier.
 Set FALLBACK_BASE_URL / FALLBACK_API_KEY / FALLBACK_MODEL (any OpenAI-compatible API such as Groq or OpenRouter)
 to be used when all Gemini keys fail. It is text only: frame descriptions need Gemini.
 
+## Course mode (v0.4): notes for every page of a course
+1. Open the course's main page in a normal tab (for Codemia: `https://codemia.io/courses/<course>`), log in first if the
+   course needs it, then open **Course mode** in the side panel and press **Find course pages**.
+2. The panel lists every page it found under that path, grouped by chapter when the page shows chapters. Untick what you
+   do not want and press **Start**. (From a lesson page it works too if the lesson has a sidebar listing the course.)
+3. A separate browser window opens in the background and visits the pages one by one **in your logged-in session**
+   (nothing is fetched server-side, so logins and the site's own scripts just work). Each page is scrolled to the end so
+   lazy content loads, captured, and sent to the backend while the next page is already loading.
+   **Keep that window visible** (small and in a corner is fine): browsers pause hidden windows and pages may come back empty.
+4. Result: one document with a title, a clickable table of contents, and each page as `## N. Title` with its notes nested
+   below (the same verifier badges as single pages). **Copy Markdown** and **Save as PDF** work on the whole course, and
+   the contents links work in the PDF.
+
+Behaviour worth knowing:
+- **Resumable.** Finished pages are saved in the browser (`chrome.storage.local`). Close the panel, hit a quota limit, or press
+  Stop, then press Find and **Resume**: done pages are skipped. Failed pages are retried; unfinished parts are also cached by the backend.
+- **Safe stops.** Two login redirects in a row stop the crawl ("are you logged in?"); three backend failures in a row stop it
+  (usually the Gemini quota) instead of failing every remaining page.
+- **Polite pace.** One page at a time with a 1.5-3.5 s pause. Use it for content you are entitled to read, for your own notes;
+  bulk copying a paid course can breach the site's terms.
+- Each lesson's prompt includes the course name, its position and the list of lesson titles as context only; the source-only
+  rule is unchanged.
+- A 27-lesson course is roughly 27 pages of Gemini calls, so expect the free-tier limits to matter; Resume exists for that.
+
+## Tests
+    cd backend && python -m unittest discover -s tests                         # Python: verifier, course context
+    cd extension && npm i --no-save jsdom && node --test tests/*.test.js       # JS: stitching, crawl driver, discovery, panel, capture
+
 ## Not built yet
-Multi-page course crawler, live updating while you scroll,
-vision descriptions for ordinary `<img>` diagrams.
-# page-notes-agent
+Live updating while you scroll, vision descriptions for ordinary `<img>` diagrams, a Markdown download button (removed earlier).

@@ -14,7 +14,7 @@
   document.title = (printJob.title || "notes").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "notes";
 
   // Lazy images are never fetched for pages that are not on screen, which would leave blanks in the PDF.
-  root.innerHTML = render(printJob.md).replace(/ loading="lazy"/g, "");
+  root.innerHTML = render(printJob.md, { ids: true }).replace(/ loading="lazy"/g, "");
 
   const imgs = [...root.querySelectorAll("img")];
   status.textContent = imgs.length ? `Loading ${imgs.length} image(s)…` : "Ready.";
