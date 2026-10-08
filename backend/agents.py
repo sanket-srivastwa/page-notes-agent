@@ -183,6 +183,8 @@ class VideoAgent:
             return (f"> ⚠️ Animation not captured: **{name}**. Reason: {e!r}\n> Source: {url}", f"{name}: {e!r}")
 
         img = f"![Final frame of animation: {name}]({media_base}/media/{path.name})"
+        if os.getenv("FRAME_DESCRIBE", "0") != "1":
+            return (img, None)  # image only: no vision call, so frames use no LLM quota
         data = path.read_bytes()
         k = cache.key("vision", self.llm.name, VISION_SYSTEM, hashlib.sha256(data).hexdigest())
         desc = cache.get(k)

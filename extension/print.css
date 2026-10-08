@@ -1,0 +1,38 @@
+:root { color-scheme: light; --ink: #14202a; --muted: #5a6872; --line: #d5dce1; --code: #f1f4f6; --accent: #0e6f78; }
+* { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; background: #e9edf0; color: var(--ink); font: 11pt/1.55 Charter, "Iowan Old Style", Georgia, serif; }
+
+.toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--line); font: 13px system-ui, sans-serif; color: var(--muted); }
+.toolbar button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+.toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* On screen the notes look like an A4 sheet; when printing, the page margins come from @page. */
+.notes { background: #fff; width: 210mm; max-width: 100%; margin: 16px auto; padding: 16mm 14mm; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
+@page { size: A4; margin: 16mm 14mm; }
+@media print {
+  body { background: #fff; }
+  .toolbar { display: none; }
+  .notes { width: auto; margin: 0; padding: 0; box-shadow: none; }
+}
+
+h1, h2, h3, h4 { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.25; break-after: avoid; }
+h1 { font-size: 21pt; margin: 0 0 4mm; }
+h2 { font-size: 15pt; margin: 8mm 0 3mm; padding-top: 3mm; border-top: 1px solid var(--line); }
+h3 { font-size: 12.5pt; margin: 5mm 0 2mm; }
+h4 { font-size: 11pt; margin: 4mm 0 2mm; color: var(--muted); }
+p { margin: 2mm 0; orphans: 3; widows: 3; }
+ul, ol { margin: 1.5mm 0; padding-left: 6mm; }
+li { margin: .8mm 0; }
+a { color: var(--accent); text-decoration: none; }
+code { font: 9.5pt ui-monospace, Menlo, Consolas, monospace; background: var(--code); padding: .2mm 1.2mm; border-radius: 3px; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 4px; padding: 3mm; margin: 3mm 0;
+  white-space: pre-wrap; overflow-wrap: anywhere; break-inside: auto; }
+pre code { background: none; padding: 0; font-size: 9pt; }
+blockquote { margin: 3mm 0; padding: 1mm 4mm; border-left: 3px solid var(--accent); color: var(--muted); }
+img { display: block; max-width: 100%; max-height: 215mm; width: auto; height: auto; margin: 3mm auto; border: 1px solid var(--line); border-radius: 4px; break-inside: avoid; }
+.tablewrap { margin: 3mm 0; }
+table { border-collapse: collapse; width: 100%; font: 9.5pt system-ui, sans-serif; }
+th, td { border: 1px solid var(--line); padding: 1.5mm 2mm; text-align: left; vertical-align: top; }
+th { background: var(--code); }
+tr { break-inside: avoid; }

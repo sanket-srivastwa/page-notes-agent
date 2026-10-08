@@ -6,9 +6,9 @@ Chrome extension + FastAPI backend. Click the toolbar icon on a page you are rea
 ## Pipeline
 1. **Extractor**: walks the rendered page and keeps headings, paragraphs, nested lists, code, tables, images,
    inline-SVG labels and `<video>` elements, in reading order.
-2. **Video agent**: downloads each silent animation, saves the richest frame from its last ~2 seconds (ffmpeg),
-   and has Gemini describe that frame (labels, components, arrows, flow). Results are inserted by the backend,
-   never rewritten by the note model. Failures appear in the notes with the exact reason.
+2. **Video agent**: downloads each silent animation and saves the richest frame from its last ~2 seconds (ffmpeg).
+   By default the frame is inserted as an image only (no LLM call). Set `FRAME_DESCRIBE=1` in `.env` to also have
+   Gemini describe it. Failures appear in the notes with the exact reason.
 3. **Chunker**: splits at h1-h3 boundaries, never inside code blocks or tables.
 4. **NoteWriter**: source-only prompt (`WRITER_SYSTEM` in `backend/agents.py`): no outside facts, no assumptions.
 5. **Verifier** (`backend/verifier.py`): checks every section's notes against its source: code blocks verbatim,
@@ -17,6 +17,11 @@ Chrome extension + FastAPI backend. Click the toolbar icon on a page you are rea
    "Recovered from source", and numbers the source never states are flagged. Each section gets a badge in the panel.
    `VERIFY_MODE=llm` adds a semantic audit call per section. Tests: `cd backend && python -m unittest discover -s tests`.
 6. **Orchestrator**: low concurrency, SQLite cache, key failover, raw-text fallback so nothing is silently lost.
+
+## Output: PDF
+Press **Save as PDF** in the side panel. A clean print view opens in a new tab and the browser's print dialog appears;
+set Destination to "Save as PDF". Images are loaded from the local backend, so keep it running until the PDF is saved.
+(Markdown download was removed; "Copy Markdown" is still there for pasting into Notion or other tools.)
 
 ## Setup
 ### 1. Backend
