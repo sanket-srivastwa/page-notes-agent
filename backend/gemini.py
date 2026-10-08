@@ -12,57 +12,11 @@ import time
 
 import httpx
 
-from llm import LLMError, LLMProvider
+from llm import (DAY_COOLDOWN, MAX_WAIT, MINUTE_COOLDOWN, KeyPool, LLMError, LLMProvider,  # noqa: F401
+                 key_tag as _tag, parse_keys)  # parse_keys/KeyPool re-exported for older imports
 
 BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-MINUTE_COOLDOWN = 30.0   # used when Google gives no retry delay
-DAY_COOLDOWN = 1800.0    # per-day quota: park the key for 30 minutes, then try it again
-MAX_WAIT = 120.0         # longest we will wait for some key to become usable
 MAX_ATTEMPTS = 14
-
-
-def parse_keys(raw: str) -> list[str]:
-    keys = [k.strip() for k in re.split(r"[,\s]+", raw or "") if k.strip() and not k.startswith("paste-")]
-    return list(dict.fromkeys(keys))  # de-duplicate, keep order
-
-
-def _tag(key: str) -> str:
-    return "…" + key[-4:]
-
-
-class KeyPool:
-    def __init__(self, keys: list[str]):
-        self.keys = keys
-        self.until: dict[str, float] = {}
-        self.dead: set[str] = set()
-        self._i = 0
-
-    def _live(self):
-        return [k for k in self.keys if k not in self.dead]
-
-    async def acquire(self) -> str:
-        deadline = time.monotonic() + MAX_WAIT
-        while True:
-            now = time.monotonic()
-            live = self._live()
-            if not live:
-                raise LLMError("All Gemini API keys were rejected as invalid. Check GEMINI_API_KEYS in .env.")
-            ready = [k for k in live if self.until.get(k, 0) <= now]
-            if ready:
-                self._i += 1
-                return ready[self._i % len(ready)]  # round-robin spreads load across keys
-            wait = min(self.until[k] for k in live) - now
-            if now + wait > deadline:
-                raise LLMError(
-                    f"All {len(live)} Gemini key(s) are out of quota. The next one frees up in about "
-                    f"{int(wait // 60) + 1} min. Add more keys or retry later.")
-            await asyncio.sleep(min(wait + 0.5, 5))
-
-    def cool(self, key: str, seconds: float):
-        self.until[key] = time.monotonic() + seconds
-
-    def kill(self, key: str):
-        self.dead.add(key)
 
 
 def _retry_delay(text: str) -> float | None:
@@ -76,15 +30,16 @@ class GeminiProvider(LLMProvider):
     def __init__(self, keys: list[str], model: str, client: httpx.AsyncClient | None = None):
         if not keys:
             raise LLMError("No Gemini API key found. Set GEMINI_API_KEYS in .env (comma-separated).")
-        self.pool = KeyPool(keys)
+        self.pool = KeyPool(keys, "Gemini", "GEMINI_API_KEYS")
         self.model = model
+        self.max_wait = MAX_WAIT  # the provider chain lowers this when a backup provider exists
         self.client = client or httpx.AsyncClient()
 
     async def _post(self, body: dict) -> dict:
         url = f"{BASE_URL}/models/{self.model}:generateContent"
         last, transient = "no attempt made", 0
         for _ in range(MAX_ATTEMPTS):
-            key = await self.pool.acquire()
+            key = await self.pool.acquire(self.max_wait)
             try:
                 r = await self.client.post(url, headers={"x-goog-api-key": key}, json=body, timeout=120)
             except httpx.HTTPError as e:
@@ -115,6 +70,17 @@ class GeminiProvider(LLMProvider):
                 continue
             raise LLMError(last)  # e.g. a bad request: retrying on another key would not help
         raise LLMError(f"Gave up after {MAX_ATTEMPTS} attempts. Last error: {last}")
+
+    async def ping_key(self, key: str) -> None:
+        """One tiny request with exactly this key (no rotation). Raises LLMError if it does not work."""
+        try:
+            r = await self.client.post(f"{BASE_URL}/models/{self.model}:generateContent", headers={"x-goog-api-key": key},
+                                       json={"contents": [{"role": "user", "parts": [{"text": "Reply with the single word: ok"}]}],
+                                             "generationConfig": {"maxOutputTokens": 32}}, timeout=60)
+        except httpx.HTTPError as e:
+            raise LLMError(f"network error: {e}")
+        if r.status_code != 200:
+            raise LLMError(f"{r.status_code}: {r.text[:300]}")
 
     @staticmethod
     def _text(data: dict) -> str:

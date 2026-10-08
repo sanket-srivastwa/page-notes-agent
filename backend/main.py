@@ -13,7 +13,7 @@ ENV_PATH = Path(__file__).parent / ".env"
 load_dotenv(ENV_PATH, override=True)  # always the .env next to this file, whatever folder you launch from
 
 from agents import Orchestrator  # noqa: E402
-from llm import LLMError, get_provider  # noqa: E402
+from llm import LLMError, ProviderChain, get_provider, provider_summary  # noqa: E402
 from media import MEDIA_DIR  # noqa: E402
 from gemini import parse_keys  # noqa: E402
 
@@ -23,7 +23,7 @@ def _key_count() -> int:
 
 
 print(f"[config] .env: {ENV_PATH} ({'found' if ENV_PATH.exists() else 'NOT FOUND'}) | "
-      f"provider: {os.getenv('LLM_PROVIDER', 'gemini')} | Gemini keys loaded: {_key_count()}")
+      f"providers in order: {', '.join(provider_summary()) or 'NONE (set a key in .env)'}")
 
 app = FastAPI(title="Page Notes Agent")
 # Personal/local use. Tighten allow_origins to your extension id when you productize.
@@ -40,7 +40,7 @@ class PagePayload(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "provider": os.getenv("LLM_PROVIDER", "gemini"),
+    return {"ok": True, "providers": provider_summary(),
             "env_file_found": ENV_PATH.exists(), "gemini_keys_loaded": _key_count()}
 
 
@@ -56,3 +56,14 @@ async def notes_stream(page: PagePayload, request: Request):
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/diagnose")
+async def diagnose():
+    """Pings every configured provider separately and reports each one's real result or error text."""
+    try:
+        prov = get_provider()
+    except LLMError as e:
+        return {"ok": False, "error": str(e)}
+    results = await prov.probe() if isinstance(prov, ProviderChain) else []
+    return {"ok": any(r["ok"] for r in results), "providers": results}

@@ -2,9 +2,10 @@
 import os
 from pathlib import Path
 
-from dotenv import dotenv_values
+from dotenv import dotenv_values, load_dotenv
 
 from gemini import parse_keys
+from llm import provider_summary
 
 p = Path(__file__).parent / ".env"
 print("Looking for:", p, "->", "FOUND" if p.exists() else "NOT FOUND")
@@ -20,3 +21,6 @@ else:
     print("Usable Gemini keys:", len(keys))
     if not keys:
         print("None found. The line must look like: GEMINI_API_KEYS=key1,key2 (one line, no quotes, not the placeholder).")
+
+    load_dotenv(p, override=True)
+    print("Providers that will be tried, in order:", provider_summary() or "NONE")
