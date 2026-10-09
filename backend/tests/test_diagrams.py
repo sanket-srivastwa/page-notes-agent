@@ -172,6 +172,15 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(v.calls, 1)
         self.assertIn("**Diagram description:**", md)
 
+    def test_the_side_panel_toggle_overrides_the_env_setting(self):
+        blocks = [{"t": "h", "level": 2, "text": "A"}, png_block()]
+        for env, sent, expected_calls in (("0", True, 1), ("1", False, 0), ("1", None, 1), ("0", None, 0)):
+            v = Vision()
+            page = {"url": "https://x.test/p", "title": "T", "blocks": blocks, "describe_images": sent}
+            with mock.patch.dict(os.environ, {"IMAGE_DESCRIBE": env}):
+                self.collect(page, v)
+            self.assertEqual(v.calls, expected_calls, f"env={env} panel={sent}")
+
     def test_description_cap_per_page(self):
         blocks = [{"t": "h", "level": 2, "text": "A"}] + [png_block() for _ in range(5)]
         v = Vision()

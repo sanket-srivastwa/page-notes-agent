@@ -263,7 +263,8 @@ class Orchestrator:
         self.swap[token] = md
         return {"t": "p", "text": token}
 
-    async def _diagrams(self, blocks: list[dict], title: str, media_base: str, referer: str) -> list[dict]:
+    async def _diagrams(self, blocks: list[dict], title: str, media_base: str, referer: str,
+                        describe: bool | None = None) -> list[dict]:
         """Inline SVG diagrams become saved pictures; with IMAGE_DESCRIBE=1, picture diagrams also get a description.
         Anything that cannot be handled is left exactly as it was, so no content is ever lost."""
         out: dict[int, list[dict]] = {}
@@ -272,7 +273,7 @@ class Orchestrator:
                 md = self.diagrams.save_inline_svg(b, media_base)
                 slim = {k: v for k, v in b.items() if k != "svg"}  # labels still go to the writer as before
                 out[i] = [self._token("svg", md, md), slim] if md else [slim]
-        if self.diagrams.describe_enabled():
+        if self.diagrams.describe_enabled(describe):
             cap = int(os.getenv("IMAGE_DESCRIBE_MAX", "12"))
             todo = [i for i, b in enumerate(blocks) if b.get("t") == "img" and self.diagrams.wants_image(b)][:cap]
             if todo:
@@ -308,9 +309,10 @@ class Orchestrator:
                 yield {"type": "status", "message": f"Captured animation {n} of {len(vids)}…"}
             blocks = [placeholder.get(i, b) for i, b in enumerate(blocks)]
         n_diag = sum(1 for b in blocks if b.get("t") == "diagram" and b.get("svg"))
-        if n_diag or self.diagrams.describe_enabled():
+        describe = page.get("describe_images")
+        if n_diag or self.diagrams.describe_enabled(describe):
             yield {"type": "status", "message": "Reading diagrams…"}
-        blocks = await self._diagrams(blocks, title, media_base, page.get("url", "") or referer)
+        blocks = await self._diagrams(blocks, title, media_base, page.get("url", "") or referer, describe)
         page = {**page, "blocks": blocks}
         units = Extractor.to_units(page.get("blocks", []))
         chunks = Chunker.split(units)

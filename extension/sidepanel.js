@@ -26,6 +26,18 @@ $("notestyle").addEventListener("change", () => {
 
 const backendUrl = () => ($("backend").value.trim() || "http://localhost:8000").replace(/\/$/, "");
 
+// "Describe picture diagrams": a saved choice always wins. Until the user decides, the backend's own IMAGE_DESCRIBE
+// setting is the default, so a .env that already turns it on is respected.
+(async () => {
+  const { describeImages } = await chrome.storage.local.get("describeImages");
+  if (typeof describeImages === "boolean") { $("describe").checked = describeImages; return; }
+  try {
+    const h = await (await fetch(`${backendUrl()}/health`)).json();
+    $("describe").checked = !!h.image_describe;
+  } catch { /* backend not running yet: stays off */ }
+})();
+$("describe").addEventListener("change", () => chrome.storage.local.set({ describeImages: $("describe").checked }));
+
 function setStatus(msg, isError = false) {
   const el = $("status");
   el.textContent = msg;
@@ -98,7 +110,7 @@ async function streamNotes(payload, signal, h = {}) {
   const res = await fetch(`${backendUrl()}/notes/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, describe_images: $("describe").checked }),
     signal,
   });
   if (!res.ok) throw new Error(`Backend returned ${res.status}`);

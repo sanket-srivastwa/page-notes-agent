@@ -35,12 +35,13 @@ class PagePayload(BaseModel):
     url: str = ""
     title: str = ""
     blocks: list[dict] = []
+    describe_images: bool | None = None  # side-panel toggle; None = use the IMAGE_DESCRIBE setting in .env
     context: str = ""  # course crawler: e.g. "Course X, lesson 5 of 27, chapter Y" (prompt context only)
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "providers": provider_summary(),
+    return {"ok": True, "image_describe": os.getenv("IMAGE_DESCRIBE", "0") == "1", "providers": provider_summary(),
             "env_file_found": ENV_PATH.exists(), "gemini_keys_loaded": _key_count()}
 
 

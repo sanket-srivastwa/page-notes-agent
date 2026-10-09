@@ -209,8 +209,9 @@ class DiagramAgent:
         self.sem = asyncio.Semaphore(int(os.getenv("VISION_CONCURRENCY", "2")))
 
     @staticmethod
-    def describe_enabled() -> bool:
-        return os.getenv("IMAGE_DESCRIBE", "0") == "1"
+    def describe_enabled(override: bool | None = None) -> bool:
+        """The side-panel toggle (when it sent one) wins; otherwise the IMAGE_DESCRIBE setting in .env."""
+        return override if override is not None else os.getenv("IMAGE_DESCRIBE", "0") == "1"
 
     @staticmethod
     def wants_image(block: dict) -> bool:

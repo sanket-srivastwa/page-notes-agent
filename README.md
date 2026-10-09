@@ -117,7 +117,8 @@ Behaviour worth knowing:
   listed as text under "Diagram:" as before. Scripts, animations and external loads are stripped before saving, and the
   picture gets a white background so dark-theme diagrams stay readable. If a diagram cannot be saved, the label list is
   kept, so nothing is lost. Icons and small decorative SVGs are ignored.
-- **Picture diagrams** (`<img>`): set `IMAGE_DESCRIBE=1` in `backend/.env` to have a vision model (Gemini, then OpenAI; Groq
+- **Picture diagrams** (`<img>`): tick **Describe picture diagrams** in the side panel (or set `IMAGE_DESCRIBE=1` in
+  `backend/.env`; that is only the default until you tick or untick the box, after which the panel's choice wins) to have a vision model (Gemini, then OpenAI; Groq
   only if you set `GROQ_VISION_MODEL`) describe each one as text, listing every label and each "A -> B" connection. Photos,
   logos and plain screenshots are detected and left alone. Descriptions are cached by image content. At most
   `IMAGE_DESCRIBE_MAX` (12) pictures per page. The backend downloads the picture itself, so images that need your login
