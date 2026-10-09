@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import cache
 import media
+from diagrams import DiagramAgent
 from llm import LLMError, LLMProvider
 from verifier import Verifier
 
@@ -218,6 +219,7 @@ class Orchestrator:
         self.llm = llm
         self.writer = NoteWriter(llm)
         self.videos = VideoAgent(llm)
+        self.diagrams = DiagramAgent(llm)
         self.verifier = Verifier(llm)
         self.swap: dict[str, str] = {}
         self.sem = asyncio.Semaphore(int(os.getenv("CONCURRENCY", "2")))
@@ -255,6 +257,33 @@ class Orchestrator:
                         "error": str(e), "verification": {"status": "skipped"}}
             return await self._verified(k, chunk, md, fresh=True)
 
+    def _token(self, kind: str, key: str, md: str) -> dict:
+        """Register `md` under a placeholder (same ⟦VIDEO:..⟧ form the writer already copies verbatim) and return the block."""
+        token = "⟦VIDEO:" + hashlib.sha256(f"{kind}:{key}".encode()).hexdigest()[:8] + "⟧"
+        self.swap[token] = md
+        return {"t": "p", "text": token}
+
+    async def _diagrams(self, blocks: list[dict], title: str, media_base: str, referer: str) -> list[dict]:
+        """Inline SVG diagrams become saved pictures; with IMAGE_DESCRIBE=1, picture diagrams also get a description.
+        Anything that cannot be handled is left exactly as it was, so no content is ever lost."""
+        out: dict[int, list[dict]] = {}
+        for i, b in enumerate(blocks):
+            if b.get("t") == "diagram" and b.get("svg"):
+                md = self.diagrams.save_inline_svg(b, media_base)
+                slim = {k: v for k, v in b.items() if k != "svg"}  # labels still go to the writer as before
+                out[i] = [self._token("svg", md, md), slim] if md else [slim]
+        if self.diagrams.describe_enabled():
+            cap = int(os.getenv("IMAGE_DESCRIBE_MAX", "12"))
+            todo = [i for i, b in enumerate(blocks) if b.get("t") == "img" and self.diagrams.wants_image(b)][:cap]
+            if todo:
+                async def one(i: int):
+                    heading, ctx = _video_context(blocks, i)
+                    return i, await self.diagrams.describe_picture(blocks[i], title, heading, ctx, referer)
+                for i, md in await asyncio.gather(*(one(i) for i in todo)):
+                    if md:
+                        out[i] = [self._token("img", blocks[i]["src"], md)]
+        return [x for i, b in enumerate(blocks) for x in out.get(i, [b])]
+
     async def run(self, page: dict, media_base: str = "", referer: str = ""):
         blocks = list(page.get("blocks", []))
         title = page.get("title") or "Untitled page"
@@ -278,6 +307,10 @@ class Orchestrator:
                     yield {"type": "warning", "message": err}
                 yield {"type": "status", "message": f"Captured animation {n} of {len(vids)}…"}
             blocks = [placeholder.get(i, b) for i, b in enumerate(blocks)]
+        n_diag = sum(1 for b in blocks if b.get("t") == "diagram" and b.get("svg"))
+        if n_diag or self.diagrams.describe_enabled():
+            yield {"type": "status", "message": "Reading diagrams…"}
+        blocks = await self._diagrams(blocks, title, media_base, page.get("url", "") or referer)
         page = {**page, "blocks": blocks}
         units = Extractor.to_units(page.get("blocks", []))
         chunks = Chunker.split(units)

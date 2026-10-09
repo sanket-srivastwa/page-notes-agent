@@ -18,6 +18,27 @@ Chrome extension + FastAPI backend. Click the toolbar icon on a page you are rea
    `VERIFY_MODE=llm` adds a semantic audit call per section. Tests: `cd backend && python -m unittest discover -s tests`.
 6. **Orchestrator**: low concurrency, SQLite cache, key failover, raw-text fallback so nothing is silently lost.
 
+## Backup providers (Gemini -> Groq -> OpenAI)
+The backend tries providers in the order of `LLM_ORDER` (default `gemini,groq,openai`) and silently moves to the
+next one when a provider fails (quota, outage, retired model, bad key, empty answer). Inside Gemini it first rotates
+through all your keys. Groq and OpenAI accept several keys too, with the same rotation: a rate-limited key is parked
+for the time the provider asks, a rejected key is dropped for the session, and the next key is used immediately.
+A provider is used only if a key is set in `backend/.env` (comma-separated, one line):
+
+    GEMINI_API_KEYS=key1,key2,key3      GEMINI_MODEL=gemini-3.8-flash
+    GROQ_API_KEYS=key1,key2             GROQ_MODEL=openai/gpt-oss-120b
+    OPENAI_API_KEYS=key1,key2           OPENAI_MODEL=gpt-4.1-mini
+
+(The older single `GROQ_API_KEY` / `OPENAI_API_KEY` still work and are merged in.) Limits are per Groq organization and
+per OpenAI project, so keys from the same account or project share one limit; use separate ones for real redundancy.
+
+The extension never shows which provider answered; switches are logged in the backend terminal only
+(`[llm] generate failed on gemini... -> trying groq`). An error reaches the panel only if every provider fails.
+Open `http://localhost:8000/diagnose` to test each provider and each individual key (shown only as "…1234"), and `/health` to see the order.
+`python check_env.py` shows what the backend will load. Model names change over time, so `/diagnose` is the quick way
+to catch a retired one. A provider whose model is retired or whose keys are rejected is skipped for 10 minutes (one log line) instead of being retried on every chunk.
+Notes are cached whichever provider wrote them. `FALLBACK_*` still works as an extra last provider (e.g. OpenRouter).
+
 ## Output: PDF
 Press **Save as PDF** in the side panel. A clean print view opens in a new tab and the browser's print dialog appears;
 set Destination to "Save as PDF". Images are loaded from the local backend, so keep it running until the PDF is saved.
@@ -90,9 +111,23 @@ Behaviour worth knowing:
   rule is unchanged.
 - A 27-lesson course is roughly 27 pages of Gemini calls, so expect the free-tier limits to matter; Resume exists for that.
 
+## Diagrams
+- **Inline SVG diagrams** (the kind drawn directly in the page, common in lessons) are captured as real pictures, with the
+  page's CSS baked in so colours, fonts and arrowheads survive, and shown in the notes and the PDF. The labels are still
+  listed as text under "Diagram:" as before. Scripts, animations and external loads are stripped before saving, and the
+  picture gets a white background so dark-theme diagrams stay readable. If a diagram cannot be saved, the label list is
+  kept, so nothing is lost. Icons and small decorative SVGs are ignored.
+- **Picture diagrams** (`<img>`): set `IMAGE_DESCRIBE=1` in `backend/.env` to have a vision model (Gemini, then OpenAI; Groq
+  only if you set `GROQ_VISION_MODEL`) describe each one as text, listing every label and each "A -> B" connection. Photos,
+  logos and plain screenshots are detected and left alone. Descriptions are cached by image content. At most
+  `IMAGE_DESCRIBE_MAX` (12) pictures per page. The backend downloads the picture itself, so images that need your login
+  cannot be described (they stay as plain images); private and local network addresses are refused.
+- Pictures and descriptions are inserted by the system after the notes are written, so the model cannot change or invent
+  them. Existing cached notes stay valid.
+
 ## Tests
     cd backend && python -m unittest discover -s tests                         # Python: verifier, course context
     cd extension && npm i --no-save jsdom && node --test tests/*.test.js       # JS: stitching, crawl driver, discovery, panel, capture
 
 ## Not built yet
-Live updating while you scroll, vision descriptions for ordinary `<img>` diagrams, a Markdown download button (removed earlier).
+Live updating while you scroll, a Markdown download button (removed earlier), vision descriptions for inline SVG and `<canvas>` diagrams, Mermaid/ASCII diagrams inside code blocks.
