@@ -112,15 +112,21 @@ class DescribeTests(unittest.TestCase):
 
     def test_description_is_returned_with_the_picture(self):
         v = Vision()
-        md = run(DiagramAgent(v).describe_picture(png_block(), "T", "H", "", ""))
+        md, reason = run(DiagramAgent(v).describe_picture(png_block(), "T", "H", "", ""))
+        self.assertIsNone(reason)
         self.assertIn("**Diagram description:**", md)
         self.assertIn("A -> B (calls)", md)
         self.assertTrue(md.startswith("![flow](data:image/png"))
 
     def test_non_diagrams_and_failures_leave_the_image_alone(self):
-        self.assertIsNone(run(DiagramAgent(Vision("NOT_A_DIAGRAM")).describe_picture(png_block(), "T", "", "", "")))
-        self.assertIsNone(run(DiagramAgent(Vision(exc=LLMError("quota"))).describe_picture(png_block(), "T", "", "", "")))
-        self.assertIsNone(run(DiagramAgent(Vision("")).describe_picture(png_block(), "T", "", "", "")))
+        for vision, why in ((Vision("NOT_A_DIAGRAM"), "not to be a diagram"), (Vision(exc=LLMError("quota")), "vision model failed"),
+                            (Vision(""), "returned nothing")):
+            md, reason = run(DiagramAgent(vision).describe_picture(png_block(), "T", "", "", ""))
+            self.assertIsNone(md)
+            self.assertIn(why, reason)
+        md, reason = run(DiagramAgent(Vision()).describe_picture({"src": "http://127.0.0.1/x.png"}, "T", "", "", ""))
+        self.assertIsNone(md)
+        self.assertIn("could not be downloaded", reason)
 
     def test_icons_and_thumbnails_are_skipped(self):
         self.assertFalse(DiagramAgent.wants_image({"src": "x", "w": 32, "h": 32}))
@@ -171,15 +177,6 @@ class PipelineTests(unittest.TestCase):
             md = "\n".join(e.get("md", "") for e in self.collect(page, v))
         self.assertEqual(v.calls, 1)
         self.assertIn("**Diagram description:**", md)
-
-    def test_the_side_panel_toggle_overrides_the_env_setting(self):
-        blocks = [{"t": "h", "level": 2, "text": "A"}, png_block()]
-        for env, sent, expected_calls in (("0", True, 1), ("1", False, 0), ("1", None, 1), ("0", None, 0)):
-            v = Vision()
-            page = {"url": "https://x.test/p", "title": "T", "blocks": blocks, "describe_images": sent}
-            with mock.patch.dict(os.environ, {"IMAGE_DESCRIBE": env}):
-                self.collect(page, v)
-            self.assertEqual(v.calls, expected_calls, f"env={env} panel={sent}")
 
     def test_description_cap_per_page(self):
         blocks = [{"t": "h", "level": 2, "text": "A"}] + [png_block() for _ in range(5)]

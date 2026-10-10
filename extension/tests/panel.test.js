@@ -17,13 +17,13 @@ async function until(fn, what, ms = 8000) {
   while (!fn()) { if (Date.now() - t0 > ms) throw new Error("timed out waiting for " + what); await tick(10); }
 }
 
-function boot({ lessons = 3, backend, health, saved = {} }) {
+function boot({ lessons = 3, backend, images = {} }) {
   const html = read("sidepanel.html").replace(/<script[^>]*><\/script>/g, "");
   const dom = new JSDOM(html, { url: "chrome-extension://abc/sidepanel.html", runScripts: "outside-only", pretendToBeVisual: true });
   const w = dom.window;
   const ctx = dom.getInternalVMContext();
 
-  const store = { ...saved };
+  const store = {};
   const calls = { windowsCreated: 0, windowsRemoved: 0, tabsCreated: [], payloads: [] };
   w.chrome = {
     storage: { local: {
@@ -43,9 +43,11 @@ function boot({ lessons = 3, backend, health, saved = {} }) {
 
   const enc = new TextEncoder();
   w.fetch = async (url, opts) => {
-    if (String(url).endsWith("/health")) {
-      if (!health) throw new Error("backend not running");
-      return { ok: true, json: async () => health };
+    if (!opts || !opts.body) {  // an image download for the export (the backend's media files or a site's pictures)
+      calls.imageFetches = (calls.imageFetches || []).concat(url);
+      const r = images[url];
+      if (!r) throw new Error("Failed to fetch");
+      return { ok: r.status === 200, status: r.status, headers: { get: () => r.type }, arrayBuffer: async () => new Uint8Array(r.bytes).buffer };
     }
     const payload = JSON.parse(opts.body);
     calls.payloads.push(payload);
@@ -55,7 +57,7 @@ function boot({ lessons = 3, backend, health, saved = {} }) {
     return { ok: true, status: 200, body: { getReader: () => ({ read: async () => (sent ? { done: true } : (sent = true, { done: false, value: bytes })) }) } };
   };
 
-  for (const f of ["render.js", "course.js", "crawler.js", "sidepanel.js"]) new vm.Script(read(f), { filename: f }).runInContext(ctx);
+  for (const f of ["render.js", "export.js", "course.js", "crawler.js", "sidepanel.js"]) new vm.Script(read(f), { filename: f }).runInContext(ctx);
 
   w.discoverCourse = async () => ({
     found: true, onIndex: true, title: "Intro to Agents", prefixPath: "/courses/intro", rootUrl: "https://x.io/courses/intro",
@@ -75,7 +77,6 @@ const okBackend = async (payload) => [
 
 const skip = !JSDOM && "jsdom not installed";
 const status = (d) => d.getElementById("status").textContent;
-const withPage = (b) => { b.w.chrome.scripting.executeScript = async () => [{ result: { url: "https://x.io/a", title: "Solo", blocks: [{ t: "p", text: "hello" }] } }]; return b; };
 
 test("course: find, pick, crawl every page, stitch one document", { skip }, async () => {
   const { w, doc, store, calls } = boot({ backend: okBackend });
@@ -181,30 +182,77 @@ test("single page mode still works", { skip }, async () => {
   assert.equal(doc.getElementById("picker").hidden, true);
 });
 
-test("describe-diagrams toggle: sent with every request, remembered, and the backend default is used until the user decides", { skip }, async () => {
-  // 1) no saved choice: follows the backend's own setting
-  let { doc } = boot({ backend: okBackend, health: { ok: true, image_describe: true } });
-  await until(() => doc.getElementById("describe").checked === true, "default from /health");
+const pageResult = { url: "https://x.io/a", title: "My Lesson: Agents", blocks: [{ t: "p", text: "hello" }] };
+const readBlob = (w, blob) => new Promise((res) => { const r = new w.FileReader(); r.onload = () => res(r.result); r.readAsText(blob); });
+const readBytes = (w, blob) => new Promise((res) => { const r = new w.FileReader(); r.onload = () => res(new Uint8Array(r.result)); r.readAsArrayBuffer(blob); });
 
-  // 2) the user switches it off: remembered, and sent as false even though the backend default is on
-  const b = withPage(boot({ backend: okBackend, health: { ok: true, image_describe: true } }));
-  await until(() => b.doc.getElementById("describe").checked === true, "default");
-  b.doc.getElementById("describe").checked = false;
-  b.doc.getElementById("describe").dispatchEvent(new b.w.Event("change"));
-  assert.equal(b.store.describeImages, false);
-  b.doc.getElementById("go").click();
-  await until(() => b.calls.payloads.length === 1, "request");
-  assert.equal(b.calls.payloads[0].describe_images, false);
+test("export: notes without images are saved as a plain .md file", { skip }, async () => {
+  const { w, doc } = boot({ backend: okBackend });
+  w.chrome.scripting.executeScript = async () => [{ result: pageResult }];
+  const saved = [];
+  w.saveBlob = (blob, name) => saved.push({ blob, name });
+  assert.equal(doc.getElementById("export").disabled, true, "disabled until there are notes");
+  doc.getElementById("go").click();
+  await until(() => doc.getElementById("export").disabled === false, "notes ready");
+  doc.getElementById("export").click();
+  await until(() => saved.length === 1, "saved");
+  assert.equal(saved[0].name, "My-Lesson-Agents.md");
+  assert.equal(await readBlob(w, saved[0].blob), w.eval("fullMd"));
+  assert.match(status(doc), /Saved My-Lesson-Agents\.md/);
+});
 
-  // 3) a saved "on" beats the backend default and is sent as true
-  const c = withPage(boot({ backend: okBackend, health: { ok: true, image_describe: false }, saved: { describeImages: true } }));
-  await until(() => c.doc.getElementById("describe").checked === true, "saved choice");
-  c.doc.getElementById("go").click();
-  await until(() => c.calls.payloads.length === 1, "request");
-  assert.equal(c.calls.payloads[0].describe_images, true);
+test("export: notes with images become a .zip with the images included and links rewritten", { skip }, async () => {
+  const withImages = async () => [
+    { type: "meta", chunks: 1 },
+    { type: "chunk", index: 0, md: "## Flow\n\n![Diagram: Flow](http://localhost:8000/media/aaaa1111.svg)\n\n![Site pic](https://cdn.test/pic.png)\n\n![Private](https://cdn.test/private.png)", verification: { status: "clean", coverage: 1 } },
+    { type: "done", verification: { clean: 1, repaired: 0, recovered: 0, issues: 0, items_recovered: 0 } },
+  ];
+  const { w, doc, calls } = boot({ backend: withImages, images: {
+    "http://localhost:8000/media/aaaa1111.svg": { status: 200, type: "image/svg+xml", bytes: [60, 115, 118, 103, 62] },
+    "https://cdn.test/pic.png": { status: 200, type: "image/png", bytes: [137, 80, 78, 71] },
+    "https://cdn.test/private.png": { status: 403, type: "text/html", bytes: [] },
+  } });
+  w.chrome.scripting.executeScript = async () => [{ result: pageResult }];
+  const saved = [];
+  w.saveBlob = (blob, name) => saved.push({ blob, name });
+  doc.getElementById("go").click();
+  await until(() => doc.getElementById("export").disabled === false, "notes ready");
+  doc.getElementById("export").click();
+  await until(() => saved.length === 1, "zip saved");
+  assert.equal(saved[0].name, "My-Lesson-Agents.zip");
+  assert.equal(saved[0].blob.type, "application/zip");
+  const bytes = await readBytes(w, saved[0].blob);
+  const text = Buffer.from(bytes).toString("latin1");
+  for (const n of ["My-Lesson-Agents.md", "media/aaaa1111.svg"]) assert.ok(text.includes(n), n);
+  assert.ok(/media\/img-[0-9a-f]{8}\.png/.test(text), "site picture stored under media/");
+  assert.ok(text.includes("![Diagram: Flow](media/aaaa1111.svg)"), "backend picture link rewritten");
+  assert.ok(text.includes("![Private](https://cdn.test/private.png)"), "a picture that could not be fetched keeps its web address");
+  assert.match(status(doc), /Saved My-Lesson-Agents\.zip with 2 image\(s\)\. 1 image\(s\) could not be downloaded.*HTTP 403/);
+  assert.equal(doc.getElementById("export").disabled, false, "button usable again");
+  assert.equal(calls.imageFetches.length, 3);
+});
 
-  // 4) backend not running: stays off and nothing breaks
-  const d = boot({ backend: okBackend });
-  await tick(50);
-  assert.equal(d.doc.getElementById("describe").checked, false);
+test("export: a finished course is exported as one document with its table of contents", { skip }, async () => {
+  const courseMd = async (payload) => [
+    { type: "meta", chunks: 1 },
+    { type: "chunk", index: 0, md: `## ${payload.title}\n\n![Diagram](http://localhost:8000/media/${payload.title.replace(/\W/g, "")}.svg)\n- point`, verification: { status: "clean", coverage: 1 } },
+    { type: "done", verification: { clean: 1, repaired: 0, recovered: 0, issues: 0, items_recovered: 0 } },
+  ];
+  // every picture the backend "made" can be downloaded (4 pages: the overview and 3 lessons)
+  const images = new Proxy({}, { get: (_, url) => (String(url).startsWith("http://localhost:8000/media/") ? { status: 200, type: "image/svg+xml", bytes: [60, 115] } : undefined) });
+  const { w, doc } = boot({ backend: courseMd, images });
+  const saved = [];
+  w.saveBlob = (blob, name) => saved.push({ blob, name });
+  doc.getElementById("find").click();
+  await until(() => !doc.getElementById("picker").hidden, "picker");
+  doc.getElementById("start").click();
+  await until(() => /^Done: all 4 pages/.test(status(doc)), "course done");
+  doc.getElementById("export").click();
+  await until(() => saved.length === 1, "saved");
+  assert.equal(saved[0].name, "Intro-to-Agents.zip");
+  const text = Buffer.from(await readBytes(w, saved[0].blob)).toString("latin1");
+  assert.ok(text.includes("## Contents"), "table of contents is in the exported Markdown");
+  assert.ok(/\]\(media\/\w+\.svg\)/.test(text), "images are relative links");
+  assert.ok(!text.includes("localhost:8000"), "no link to the local backend is left");
+  assert.match(status(doc), /Saved Intro-to-Agents\.zip with 4 image\(s\)\./);
 });

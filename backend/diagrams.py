@@ -209,9 +209,9 @@ class DiagramAgent:
         self.sem = asyncio.Semaphore(int(os.getenv("VISION_CONCURRENCY", "2")))
 
     @staticmethod
-    def describe_enabled(override: bool | None = None) -> bool:
-        """The side-panel toggle (when it sent one) wins; otherwise the IMAGE_DESCRIBE setting in .env."""
-        return override if override is not None else os.getenv("IMAGE_DESCRIBE", "0") == "1"
+    def describe_enabled() -> bool:
+        """Controlled by IMAGE_DESCRIBE in backend/.env (off by default)."""
+        return os.getenv("IMAGE_DESCRIBE", "0") == "1"
 
     @staticmethod
     def wants_image(block: dict) -> bool:
@@ -226,14 +226,16 @@ class DiagramAgent:
             return None
         return svg_markdown(block.get("title", ""), save_svg(svg), media_base)
 
-    async def describe_picture(self, block: dict, page_title: str, heading: str, context: str, referer: str) -> str | None:
-        """Markdown (picture + description) for a diagram picture, or None to leave the image as it was."""
+    async def describe_picture(self, block: dict, page_title: str, heading: str, context: str,
+                               referer: str) -> tuple[str | None, str | None]:
+        """(markdown, None) when described, or (None, short reason) so the image stays as it was. The reasons are
+        summarised in the backend terminal."""
         src = block["src"]
         try:
             data, mime = await fetch_image(src, referer)
         except DiagramError as e:
             print(f"[diagram] {src[:80]}: {e}")
-            return None
+            return None, f"could not be downloaded ({e})"
         k = cache.key("imgvision", self.llm.name, IMAGE_VISION_SYSTEM, hashlib.sha256(data).hexdigest())
         desc = cache.get(k)
         if not desc:
@@ -253,11 +255,11 @@ class DiagramAgent:
                     desc = await self.llm.describe_image(IMAGE_VISION_SYSTEM, prompt, data, mime)
             except LLMError as e:
                 print(f"[diagram] vision failed for {src[:80]}: {e}")
-                return None
+                return None, f"vision model failed ({' '.join(str(e).split())[:90]})"
             if not desc:
-                return None
+                return None, "vision model returned nothing"
             cache.put(k, desc)
         if desc.strip().upper().startswith("NOT_A_DIAGRAM"):
-            return None
+            return None, "judged not to be a diagram (photo, logo or plain screenshot)"
         alt = _alt(block.get("alt", ""))
-        return f"![{alt}]({src})\n\n**Diagram description:**\n\n{desc.strip()}"
+        return f"![{alt}]({src})\n\n**Diagram description:**\n\n{desc.strip()}", None

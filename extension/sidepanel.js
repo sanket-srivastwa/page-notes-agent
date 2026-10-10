@@ -26,18 +26,6 @@ $("notestyle").addEventListener("change", () => {
 
 const backendUrl = () => ($("backend").value.trim() || "http://localhost:8000").replace(/\/$/, "");
 
-// "Describe picture diagrams": a saved choice always wins. Until the user decides, the backend's own IMAGE_DESCRIBE
-// setting is the default, so a .env that already turns it on is respected.
-(async () => {
-  const { describeImages } = await chrome.storage.local.get("describeImages");
-  if (typeof describeImages === "boolean") { $("describe").checked = describeImages; return; }
-  try {
-    const h = await (await fetch(`${backendUrl()}/health`)).json();
-    $("describe").checked = !!h.image_describe;
-  } catch { /* backend not running yet: stays off */ }
-})();
-$("describe").addEventListener("change", () => chrome.storage.local.set({ describeImages: $("describe").checked }));
-
 function setStatus(msg, isError = false) {
   const el = $("status");
   el.textContent = msg;
@@ -84,7 +72,7 @@ function progress(done, total) {
 
 function setOutput(md, enabled) {
   fullMd = md;
-  $("copy").disabled = $("pdf").disabled = !enabled;
+  $("copy").disabled = $("export").disabled = $("pdf").disabled = !enabled;
 }
 
 $("cancel").onclick = () => controller && controller.abort();
@@ -92,6 +80,45 @@ $("cancel").onclick = () => controller && controller.abort();
 $("copy").onclick = async () => {
   await navigator.clipboard.writeText(fullMd);
   setStatus("Markdown copied.");
+};
+
+// Saves a Blob as a file download (an <a download> needs no extra permission in an extension page).
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// Export: a plain .md when there are no images; otherwise a .zip with the Markdown and every image (media/...), links rewritten.
+// Images are downloaded by the browser with your login, so images that need a session are included too.
+$("export").onclick = async () => {
+  const name = exportName(pageTitle);
+  const urls = imageRefs(fullMd);
+  if (!urls.length) {
+    saveBlob(new Blob([fullMd], { type: "text/markdown;charset=utf-8" }), `${name}.md`);
+    setStatus(`Saved ${name}.md.`);
+    return;
+  }
+  $("export").disabled = true;
+  try {
+    const got = await collectImages(urls, (u) => fetch(u, { credentials: "include" }), {
+      onProgress: (i, n) => setStatus(`Collecting images for the export: ${i} of ${n}…`),
+    });
+    const zip = buildZip([{ name: `${name}.md`, data: new TextEncoder().encode(rewriteImages(fullMd, got.map)) }, ...got.files]);
+    saveBlob(new Blob([zip], { type: "application/zip" }), `${name}.zip`);
+    const bad = got.failed.length;
+    setStatus(`Saved ${name}.zip with ${got.files.length} image(s).` +
+      (bad ? ` ${bad} image(s) could not be downloaded and keep their web address (first reason: ${got.failed[0].reason}).` : ""), bad > 0);
+  } catch (e) {
+    setStatus(`Export failed: ${e.message}`, true);
+  } finally {
+    $("export").disabled = false;
+  }
 };
 
 // Opens a clean print view of the notes in a new tab; choose "Save as PDF" in the print dialog.
@@ -110,7 +137,7 @@ async function streamNotes(payload, signal, h = {}) {
   const res = await fetch(`${backendUrl()}/notes/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...payload, describe_images: $("describe").checked }),
+    body: JSON.stringify(payload),
     signal,
   });
   if (!res.ok) throw new Error(`Backend returned ${res.status}`);

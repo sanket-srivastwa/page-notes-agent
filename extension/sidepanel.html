@@ -17,7 +17,10 @@
     <p id="status" role="status">Open a page you are reading, then take notes.</p>
     <div class="row tools">
       <button id="copy" class="ghost" disabled>Copy Markdown</button>
+      <button id="export" class="ghost" disabled title="Saves a Markdown file, or a .zip with the Markdown and all its images so it works anywhere">Export Markdown</button>
       <button id="pdf" class="ghost" disabled>Save as PDF</button>
+    </div>
+    <div class="row">
       <label class="stylepick">Style
         <select id="notestyle">
           <option value="caveat">Handwritten (cursive)</option>
@@ -26,12 +29,6 @@
         </select>
       </label>
     </div>
-    <label class="opt">
-      <input type="checkbox" id="describe">
-      <span>Describe picture diagrams
-        <small>A vision model reads each diagram image and adds its labels and arrows as text. Uses vision quota. Applies to pages processed from now on.</small>
-      </span>
-    </label>
     <details id="coursebox">
       <summary>Course mode: take notes for every page of a course</summary>
       <p class="hint">Open the course's main page (or any lesson), then press Find. Pages are opened one at a time in a
@@ -65,6 +62,7 @@
     </article>
   </main>
   <script src="render.js"></script>
+  <script src="export.js"></script>
   <script src="course.js"></script>
   <script src="crawler.js"></script>
   <script src="sidepanel.js"></script>

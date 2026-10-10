@@ -263,27 +263,46 @@ class Orchestrator:
         self.swap[token] = md
         return {"t": "p", "text": token}
 
-    async def _diagrams(self, blocks: list[dict], title: str, media_base: str, referer: str,
-                        describe: bool | None = None) -> list[dict]:
-        """Inline SVG diagrams become saved pictures; with IMAGE_DESCRIBE=1, picture diagrams also get a description.
-        Anything that cannot be handled is left exactly as it was, so no content is ever lost."""
+    async def _diagrams(self, blocks: list[dict], title: str, media_base: str, referer: str) -> tuple[list[dict], dict]:
+        """Inline SVG diagrams become saved pictures; with descriptions on, picture diagrams also get a description.
+        Anything that cannot be handled is left exactly as it was, so no content is ever lost. Returns the new blocks
+        and a report of what happened (printed in the backend terminal, so a skipped picture is never a silent mystery)."""
+        enabled = self.diagrams.describe_enabled()
+        rep = {"enabled": enabled, "svg": 0, "svg_failed": 0, "images": 0, "described": 0, "skipped": {}}
+
+        def skip(reason: str):
+            rep["skipped"][reason] = rep["skipped"].get(reason, 0) + 1
+
         out: dict[int, list[dict]] = {}
         for i, b in enumerate(blocks):
             if b.get("t") == "diagram" and b.get("svg"):
                 md = self.diagrams.save_inline_svg(b, media_base)
                 slim = {k: v for k, v in b.items() if k != "svg"}  # labels still go to the writer as before
                 out[i] = [self._token("svg", md, md), slim] if md else [slim]
-        if self.diagrams.describe_enabled(describe):
+                rep["svg" if md else "svg_failed"] += 1
+        imgs = [i for i, b in enumerate(blocks) if b.get("t") == "img" and b.get("src")]
+        rep["images"] = len(imgs)
+        if enabled and imgs:
             cap = int(os.getenv("IMAGE_DESCRIBE_MAX", "12"))
-            todo = [i for i, b in enumerate(blocks) if b.get("t") == "img" and self.diagrams.wants_image(b)][:cap]
-            if todo:
-                async def one(i: int):
-                    heading, ctx = _video_context(blocks, i)
-                    return i, await self.diagrams.describe_picture(blocks[i], title, heading, ctx, referer)
-                for i, md in await asyncio.gather(*(one(i) for i in todo)):
-                    if md:
-                        out[i] = [self._token("img", blocks[i]["src"], md)]
-        return [x for i, b in enumerate(blocks) for x in out.get(i, [b])]
+            todo = []
+            for i in imgs:
+                if not self.diagrams.wants_image(blocks[i]):
+                    skip("too small (icon or thumbnail)")
+                elif len(todo) >= cap:
+                    skip(f"over the limit of {cap} per page")
+                else:
+                    todo.append(i)
+
+            async def one(i: int):
+                heading, ctx = _video_context(blocks, i)
+                return i, await self.diagrams.describe_picture(blocks[i], title, heading, ctx, referer)
+            for i, (md, reason) in await asyncio.gather(*(one(i) for i in todo)):
+                if md:
+                    out[i] = [self._token("img", blocks[i]["src"], md)]
+                    rep["described"] += 1
+                else:
+                    skip(reason or "skipped")
+        return [x for i, b in enumerate(blocks) for x in out.get(i, [b])], rep
 
     async def run(self, page: dict, media_base: str = "", referer: str = ""):
         blocks = list(page.get("blocks", []))
@@ -309,10 +328,15 @@ class Orchestrator:
                 yield {"type": "status", "message": f"Captured animation {n} of {len(vids)}…"}
             blocks = [placeholder.get(i, b) for i, b in enumerate(blocks)]
         n_diag = sum(1 for b in blocks if b.get("t") == "diagram" and b.get("svg"))
-        describe = page.get("describe_images")
-        if n_diag or self.diagrams.describe_enabled(describe):
+        if n_diag or self.diagrams.describe_enabled():
             yield {"type": "status", "message": "Reading diagrams…"}
-        blocks = await self._diagrams(blocks, title, media_base, page.get("url", "") or referer, describe)
+        blocks, rep = await self._diagrams(blocks, title, media_base, page.get("url", "") or referer)
+        if rep["svg"] or rep["svg_failed"] or (rep["enabled"] and rep["images"]):
+            skipped = "; ".join(f"{n} {r}" for r, n in rep["skipped"].items())
+            print(f"[diagram] {title[:60]!r}: {rep['svg']} SVG saved"
+                  + (f", {rep['svg_failed']} SVG unusable" if rep["svg_failed"] else "")
+                  + (f", {rep['described']} of {rep['images']} pictures described" if rep["enabled"] else "")
+                  + (f" | skipped: {skipped}" if skipped else ""))
         page = {**page, "blocks": blocks}
         units = Extractor.to_units(page.get("blocks", []))
         chunks = Chunker.split(units)

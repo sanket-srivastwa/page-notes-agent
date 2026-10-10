@@ -42,7 +42,12 @@ Notes are cached whichever provider wrote them. `FALLBACK_*` still works as an e
 ## Output: PDF
 Press **Save as PDF** in the side panel. A clean print view opens in a new tab and the browser's print dialog appears;
 set Destination to "Save as PDF". Images are loaded from the local backend, so keep it running until the PDF is saved.
-(Markdown download was removed; "Copy Markdown" is still there for pasting into Notion or other tools.)
+**Copy Markdown** puts the Markdown on the clipboard (image links still point at the local backend). **Export Markdown** saves a
+file you can keep: a plain `.md` when the notes have no images, otherwise a `.zip` with the Markdown plus a `media/` folder
+holding every image, with the links rewritten to `media/...`. The browser downloads the images itself, with your login, so
+pictures that need a session are included; an image that cannot be fetched keeps its web address and is reported in the
+status line. The zip opens in Obsidian, Typora or VS Code, and imports into Notion (Import -> Markdown & CSV). Works for single pages
+and whole courses (the course export includes the table of contents).
 
 ## Handwritten note style
 The side panel has a **Style** dropdown: *Handwritten (cursive)* (Caveat, default), *Handwritten (neat)* (Kalam) or *Plain*.
@@ -97,8 +102,8 @@ to be used when all Gemini keys fail. It is text only: frame descriptions need G
    lazy content loads, captured, and sent to the backend while the next page is already loading.
    **Keep that window visible** (small and in a corner is fine): browsers pause hidden windows and pages may come back empty.
 4. Result: one document with a title, a clickable table of contents, and each page as `## N. Title` with its notes nested
-   below (the same verifier badges as single pages). **Copy Markdown** and **Save as PDF** work on the whole course, and
-   the contents links work in the PDF.
+   below (the same verifier badges as single pages). **Copy Markdown**, **Export Markdown** (one `.md`/`.zip` for the whole
+   course, contents links included) and **Save as PDF** all work on the whole course, and the contents links work in the PDF.
 
 Behaviour worth knowing:
 - **Resumable.** Finished pages are saved in the browser (`chrome.storage.local`). Close the panel, hit a quota limit, or press
@@ -117,12 +122,14 @@ Behaviour worth knowing:
   listed as text under "Diagram:" as before. Scripts, animations and external loads are stripped before saving, and the
   picture gets a white background so dark-theme diagrams stay readable. If a diagram cannot be saved, the label list is
   kept, so nothing is lost. Icons and small decorative SVGs are ignored.
-- **Picture diagrams** (`<img>`): tick **Describe picture diagrams** in the side panel (or set `IMAGE_DESCRIBE=1` in
-  `backend/.env`; that is only the default until you tick or untick the box, after which the panel's choice wins) to have a vision model (Gemini, then OpenAI; Groq
-  only if you set `GROQ_VISION_MODEL`) describe each one as text, listing every label and each "A -> B" connection. Photos,
-  logos and plain screenshots are detected and left alone. Descriptions are cached by image content. At most
-  `IMAGE_DESCRIBE_MAX` (12) pictures per page. The backend downloads the picture itself, so images that need your login
-  cannot be described (they stay as plain images); private and local network addresses are refused.
+- **Picture diagrams** (`<img>`): set `IMAGE_DESCRIBE=1` in `backend/.env` (off by default, no button in the panel) to have a
+  vision model (Gemini, then OpenAI; Groq only if you set `GROQ_VISION_MODEL`) describe each one as text, listing every label
+  and each "A -> B" connection. Photos, logos and plain screenshots are detected and left alone. Descriptions are cached by
+  image content. At most `IMAGE_DESCRIBE_MAX` (12) pictures per page. The backend downloads the picture itself, so images
+  that need your login cannot be described (they stay as plain images); private and local network addresses are refused.
+  Each page prints one summary line in the backend terminal, for example
+  `[diagram] 'Lesson': 0 SVG saved, 1 of 4 pictures described | skipped: 2 too small (icon or thumbnail); 1 could not be downloaded (...)`,
+  so you can see why a picture was left alone. Most sites have few `<img>` diagrams, which is why this is a setting and not a button.
 - Pictures and descriptions are inserted by the system after the notes are written, so the model cannot change or invent
   them. Existing cached notes stay valid.
 
@@ -131,4 +138,4 @@ Behaviour worth knowing:
     cd extension && npm i --no-save jsdom && node --test tests/*.test.js       # JS: stitching, crawl driver, discovery, panel, capture
 
 ## Not built yet
-Live updating while you scroll, a Markdown download button (removed earlier), vision descriptions for inline SVG and `<canvas>` diagrams, Mermaid/ASCII diagrams inside code blocks.
+Live updating while you scroll, vision descriptions for inline SVG and `<canvas>` diagrams, Mermaid/ASCII diagrams inside code blocks.
